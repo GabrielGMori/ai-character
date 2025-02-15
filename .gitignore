@@ -1,3 +1,4 @@
 .env
 .venv
 /Services/__pycache__
+voices.txt

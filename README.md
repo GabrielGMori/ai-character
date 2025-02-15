@@ -4,6 +4,6 @@ This is just a side project for now.
 
 # TODO
 - [x] Text to speech
-- [ ] Generate responses
-- [ ] Speech to text
+- [x] Generate responses
+- [x] Speech to text
 - [ ] Real time conversations (The AI decides the appropriate moment to answer)
