@@ -1,5 +1,3 @@
-import os
-import time
 from RealtimeTTS import TextToAudioStream, EdgeEngine
 
 class TextToSpeech:
