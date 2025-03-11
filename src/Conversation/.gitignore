@@ -1,1 +1,4 @@
 __pycache__
+/TTS_Voices/Models/*
+/TTS_Voices/Configs/*
+/Presets/*
