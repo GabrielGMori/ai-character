@@ -1,7 +1,7 @@
 import threading
 import speech_recognition
 from queue import Queue
-import chalk
+import logging
 
 class TranscriptionData:
     def __init__(self, audio_data):
@@ -14,7 +14,8 @@ class TranscriptionData:
         self.transcription_complete.set()
 
 class SpeechToText:
-    def __init__(self, language, mic_index, author_name, on_audio_received):
+    def __init__(self, language, mic_index, author_name, on_audio_received, logger=logging.getLogger(__name__)):
+        self.logger = logger
         self.language = language
         self.mic_index = mic_index
         self.author_name = author_name
@@ -24,25 +25,25 @@ class SpeechToText:
         self.transcription_queue = Queue()
         self.processing_transcriptions = False
 
-        print(chalk.blue("[LOADING SPEECH TO TEXT MODEL...]"))
+        self.logger.info("LOADING SPEECH TO TEXT MODEL...")
         self.recognizer = speech_recognition.Recognizer()
         self.recognizer.dynamic_energy_threshold = False
         self.recognizer.pause_threshold = 0.85
         self.adjust_for_ambient_noise()
-        print(chalk.blue("[SPEECH TO TEXT READY!]"))
+        self.logger.info("SPEECH TO TEXT READY!")
 
     def adjust_for_ambient_noise(self):
         with speech_recognition.Microphone(self.mic_index) as mic:
             self.recognizer.adjust_for_ambient_noise(mic, 0.2)
-            print(chalk.yellow(f"[NEW STT THRESHOLD: {self.recognizer.energy_threshold}]"))
+            self.logger.info(f"NEW STT THRESHOLD: {self.recognizer.energy_threshold}")
 
     def process_text(self, text):
-        print(chalk.cyan(f"[RECEIVED TEXT: {text}]"))
+        self.logger.info(f"RECEIVED TEXT: {text}")
         self.on_audio_received(text, self.author_name)
 
     def process_transcription_queue(self):
         if self.processing_transcriptions == True: return
-        print(chalk.black("[PROCESSING QUEUE]"))
+        self.logger.info("PROCESSING QUEUE")
         full_text = ""
 
         while not self.transcription_queue.empty():
@@ -50,7 +51,7 @@ class SpeechToText:
             next = self.transcription_queue.get()
 
             if next.transcribed_text == None:
-                print(chalk.black("[WAITING FOR TRANSCRIPTION]"))
+                self.logger.info("WAITING FOR TRANSCRIPTION")
                 next.transcription_complete.wait()
             if not next.transcribed_text == " ":
                 full_text += f" {next.transcribed_text}"
@@ -62,12 +63,12 @@ class SpeechToText:
 
     def transcribe_audio_data(self, audio_data):
         try:
-            print(chalk.green("[TRANSCRIBING...]"))
+            self.logger.info("TRANSCRIBING...")
             text = self.recognizer.recognize_google(audio_data, language=self.language)
-            print(chalk.green(f"[TRANSCRIBED: {text}]"))
+            self.logger.info(f"TRANSCRIBED: {text}")
             return text
         except speech_recognition.UnknownValueError:
-            print(chalk.green("[NOTHING TO TRANSCRIBE]"))
+            self.logger.info("NOTHING TO TRANSCRIBE")
             return " "
 
     def transcribe(self, transcription_data):
@@ -75,7 +76,7 @@ class SpeechToText:
         transcription_data.set_transcribed_text(transcribed_text)
 
     def capture_speech(self):
-        print(chalk.red("[CAPTURING SPEECH...]")) 
+        self.logger.info("CAPTURING SPEECH...")
         with speech_recognition.Microphone(self.mic_index) as mic:
             audio_data = self.recognizer.listen(mic)
 
@@ -86,18 +87,11 @@ class SpeechToText:
             threading.Thread(target=self.transcribe, args=[transcription_data]).start()
 
     def start_listening(self):
-        print("[STARTED LISTENING]")
+        self.logger.info("STARTED LISTENING")
         self.listening = True
         while self.listening == True:
             self.capture_speech()
     
     def stop_listening(self):
-        print("[STOPPED LISTENING]")
+        self.logger.info("STOPPED LISTENING")
         self.listening = False
-
-if __name__ == "__main__":
-    def process(text, author):
-        print(chalk.bold(f"[TEXT PROCESSED FROM {author}: {text}]"))
-
-    tts = SpeechToText("pt", 1, "Mori", process)
-    tts.start_listening()

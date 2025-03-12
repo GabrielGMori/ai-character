@@ -1,19 +1,21 @@
+import logging
 import threading
-from Output_Services.text_to_speech import TextToSpeech
+from Output_Services.Text_to_Speech.text_to_speech import TextToSpeech
 from Output_Services.gemini_ai import GeminiAI
 from Stream_Input_Services.speech_to_text import SpeechToText
 from google.genai import types
 import json
+import time
 import os
 
-MIC_INDEX = 3
-PRESET_NAME = "Steve"
+MIC_INDEX = 1
+PRESET_NAME = "Lula"
 
 PRESETS_DIR = "src/Conversation/Presets/"
 with open(os.path.join(PRESETS_DIR, f"{PRESET_NAME}.json"), 'r') as file:
     preset = json.load(file)
 
-VOICES_DIR = "src/Conversation/TTS_Voices"
+VOICES_DIR = "src/Output_Services/Text_to_Speech/Voices"
 MODEL_PATH = os.path.abspath(VOICES_DIR + "/Models/" + preset["voice"] + ".onnx")
 CONFIG_PATH = os.path.abspath(VOICES_DIR + "/Configs/" + preset["voice"] + ".onnx.json")
 
@@ -27,7 +29,7 @@ SAFETY = [
     {"category": types.HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY, "threshold": types.HarmBlockThreshold.BLOCK_NONE}
 ]
 
-instructions = preset["instructions"] + """
+INSTRUCTIONS = preset["instructions"] + """
 \n
 You should follow the character described above
 Before messages you will have a brief description of where it is coming, for example "John said:" or "Gabriel sent on twitch chat:", you shouldn't respond to these descriptions, instead use them as context
@@ -56,7 +58,7 @@ AI: ""
 """
 
 CONFIG = types.GenerateContentConfig(
-    system_instruction=instructions,
+    system_instruction=INSTRUCTIONS,
     max_output_tokens=preset["max_output_tokens"],
     temperature=preset["temperature"],
     frequency_penalty=preset["frequency_penalty"],
@@ -65,45 +67,35 @@ CONFIG = types.GenerateContentConfig(
 
 ERROR_RESPONSES = preset["error_responses"]
 
+logging.basicConfig(
+    filename=f"src/Conversation/Logs/{time.time()}.log",
+    encoding='utf-8',
+    level=logging.DEBUG,
+    format="%(asctime)s.%(msecs)03d - %(levelname)s - %(name)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+LOGGER = logging.getLogger(__name__)
+
 def on_audio_received(transcript, author_name):
     if transcript == "": 
         return
-    print("[RECEIVED: " + transcript + "]")
     if not tts.is_playing(): 
-        print("[REPLYING...]")
         tts.uninterrupt_stream()
         response = ai.generate(f"{author_name} said: {transcript}")
-        # The first chunk of gemini's responses is usually just a maximum of 3 characters for some reason
-        # For that reason, i'm attaching the first chunk to the beggining of the second chunk before sending it to TTS
-        # i = 0
-        # first_chunk_text = ""
-        # full_response = ""
-        # for chunk in response:
-        #     i += 1
-        #     if chunk and tts.interrupted == False:
-        #         full_response += chunk.text.replace("\n", "")
-        #         if i == 1:
-        #             first_chunk_text = chunk.text.replace("\n", "")
-        #         else:
-        #             text = chunk.text.replace("\n", "")
-        #             if first_chunk_text != "":
-        #                 text = first_chunk_text + text
-        #                 first_chunk_text = ""
-        #             tts.add_to_stream(text)
         words = response.text.split()
         if len(words) > 0:
             for i in range(0, len(words), 10):
                 tts.add_to_stream(" ".join(words[i:i+10]))
                 threading.Thread(target=tts.play_stream).start()
         else:
-            print("[NO RESPONSE]")
+            print("NO RESPONSE")
     else:
         ai.append_to_chat(types.Content(role="user", parts=[types.Part(text=f"{author_name} said: {transcript}")]))
 
 
-ai = GeminiAI(MODEL, CONFIG, ERROR_RESPONSES)
-tts = TextToSpeech(MODEL_PATH, CONFIG_PATH)
-stt = SpeechToText(preset["language"], MIC_INDEX, "Caéf", on_audio_received)
+ai = GeminiAI(MODEL, CONFIG, ERROR_RESPONSES, LOGGER)
+tts = TextToSpeech(MODEL_PATH, CONFIG_PATH, LOGGER)
+stt = SpeechToText(preset["language"], MIC_INDEX, "Caéf", on_audio_received, LOGGER)
 
 def start_conversation():
     tts.interrupted = False

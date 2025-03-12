@@ -1,3 +1,4 @@
 .env
-.venv
-voices.txt
+.venv/
+.vscode/
+__pycache__/

@@ -1,15 +1,17 @@
 import os.path
 from RealtimeTTS import TextToAudioStream, PiperEngine, PiperVoice
+import logging
 
 class TextToSpeech:
-    def __init__(self, model_path, config_path):
-        print("[LOADING TEXT TO SPEECH VOICE...]")
+    def __init__(self, model_path, config_path, logger=logging.getLogger(__name__)):
+        self.logger = logger
+        self.logger.info("LOADING TEXT TO SPEECH VOICE...")
 
         if not os.path.exists(model_path):
-            print("[COULD NOT FIND TEXT TO SPEECH MODEL]")
+            self.logger.critical("COULD NOT FIND TEXT TO SPEECH MODEL")
             return
         if not os.path.exists(config_path):
-            print("[COULD NOT FIND TEXT TO SPEECH CONFIGURATION FILE]")
+            self.logger.critical("COULD NOT FIND TEXT TO SPEECH CONFIGURATION FILE")
             return
         
         self.model_file = os.path.abspath(model_path)
@@ -20,22 +22,22 @@ class TextToSpeech:
             config_file=self.config_file,
         )
 
-        print("[LOADING TEXT TO SPEECH ENGINE...]")
+        self.logger.info("LOADING TEXT TO SPEECH ENGINE...")
         self.engine = PiperEngine(
             piper_path="piper",
             voice=self.voice,
         )
 
-        print("[CREATING TEXT TO SPEECH AUDIO STREAM...]")
+        self.logger.info("CREATING TEXT TO SPEECH AUDIO STREAM...")
         self.stream = TextToAudioStream(self.engine)
-        print("[TEXT TO SPEECH READY!]")
+        self.logger.info("TEXT TO SPEECH READY!")
 
     def is_playing(self):
         return self.stream.is_playing()
 
     def play_stream(self):
         if self.stream.is_playing() == False and self.interrupted == False:
-            print("[PLAYING TEXT TO SPEECH...]")
+            self.logger.info("PLAYING TEXT TO SPEECH...")
             self.stream.play()
 
     def interrupt_stream(self):
@@ -52,6 +54,6 @@ class TextToSpeech:
 
     def add_to_stream(self, string):
         if self.interrupted == False:
-            print("[ADDING TO SYNTHESIZE: " + string.replace("\n", "") + "]")
+            self.logger.info("ADDING TO SYNTHESIZE: " + string.replace("\n", "") + "")
             self.stream.feed(string)
 
