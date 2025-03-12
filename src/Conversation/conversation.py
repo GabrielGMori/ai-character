@@ -2,7 +2,7 @@ import logging
 import threading
 from Output_Services.Text_to_Speech.text_to_speech import TextToSpeech
 from Output_Services.gemini_ai import GeminiAI
-from Stream_Input_Services.speech_to_text import SpeechToText
+from Input_Services.speech_to_text import SpeechToText
 from google.genai import types
 import json
 import time
