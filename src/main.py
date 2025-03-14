@@ -1,20 +1,24 @@
 if __name__ == '__main__':
-    import threading
     from concurrent.futures import ThreadPoolExecutor
-    from Conversation.conversation import ConversationModule
+    from Modules.Conversation.conversation import ConversationModule
+    from Services.Input.speech_to_text import SpeechToText
 
-    conversation = ConversationModule()
+    def on_stt_audio_received(author, text):
+        conversation.send(author, text)
+
+    conversation = ConversationModule(preset="Steve")
+    stt = SpeechToText(author="Mori", language=conversation.preset["language"], mic_index=1, on_audio_received=on_stt_audio_received, )
 
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="Main")
-    executor.submit(conversation.start_conversation)
+    executor.submit(stt.start_listening)
 
     while True:
         try:
             input()
-            conversation.interrupt_speech()
+            conversation.interrupt_tts()
         except KeyboardInterrupt:
-            conversation.interrupt_speech()
-            conversation.stop_conversation()
+            conversation.interrupt_tts()
+            stt.stop_listening()
             executor.shutdown()
             break
     print("Finished program")

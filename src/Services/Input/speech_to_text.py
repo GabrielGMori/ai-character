@@ -15,13 +15,13 @@ class TranscriptionData:
         self.transcription_complete.set()
 
 class SpeechToText:
-    def __init__(self, language, mic_index, author_name, on_audio_received, logger=logging.getLogger(__name__)):
+    def __init__(self, author, language, mic_index, on_audio_received, logger=logging.getLogger(__name__)):
         self.logger = logger
         self.executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="STT")
 
+        self.author = author
         self.language = language
         self.mic_index = mic_index
-        self.author_name = author_name
         self.on_audio_received = on_audio_received
 
         self.listening = False
@@ -29,32 +29,32 @@ class SpeechToText:
         self.process_queue_lock = threading.Lock()
         self.processing_transcriptions = False
 
-        self.logger.info("LOADING SPEECH TO TEXT MODEL...")
+        self.logger.info("Loading speech to text model...")
         self.recognizer = speech_recognition.Recognizer()
         self.recognizer.dynamic_energy_threshold = False
         self.recognizer.pause_threshold = 0.85
         self.adjust_for_ambient_noise()
-        self.logger.info("SPEECH TO TEXT READY!")
+        self.logger.info("Speech to text ready!")
 
     def adjust_for_ambient_noise(self):
-        with speech_recognition.Microphone(self.mic_index) as mic:
-            self.recognizer.adjust_for_ambient_noise(mic, 0.2)
-            self.logger.info(f"NEW STT THRESHOLD: {self.recognizer.energy_threshold}")
+        with speech_recognition.Microphone(device_index=self.mic_index) as mic:
+            self.recognizer.adjust_for_ambient_noise(source=mic, duration=0.2)
+            self.logger.info(f"New stt threshold: {self.recognizer.energy_threshold}")
 
     def process_text(self, text):
-        self.logger.info(f"RECEIVED TEXT: {text}")
-        self.on_audio_received(text, self.author_name)
+        self.logger.info(f"Received text: {text}")
+        self.on_audio_received(self.author, text)
 
     def process_transcription_queue(self):
         self.process_queue_lock.acquire(timeout=1)
-        self.logger.info("PROCESSING QUEUE")
+        self.logger.info("Processing queue")
         full_text = ""
 
         while not self.transcription_queue.empty():
             transcription_data = self.transcription_queue.get()
 
             if transcription_data.transcribed_text == None:
-                self.logger.info("WAITING FOR TRANSCRIPTION")
+                self.logger.info("Waiting for transcription")
                 transcription_data.transcription_complete.wait()
             if transcription_data.transcribed_text != " ":
                 full_text += f" {transcription_data.transcribed_text}"
@@ -64,15 +64,16 @@ class SpeechToText:
             return
         self.process_text(stripped_text)
         self.process_queue_lock.release()
+        self.logger.info("Finished processing queue")
 
     def transcribe_audio_data(self, audio_data):
         try:
-            self.logger.info("TRANSCRIBING...")
+            self.logger.info("Transcribing...")
             text = self.recognizer.recognize_google(audio_data, language=self.language)
-            self.logger.info(f"TRANSCRIBED: {text}")
+            self.logger.info(f"Transcribed: {text}")
             return text
         except speech_recognition.UnknownValueError:
-            self.logger.info("NOTHING TO TRANSCRIBE")
+            self.logger.info("Nothing to transcribe")
             return " "
 
     def transcribe(self, transcription_data):
@@ -80,7 +81,7 @@ class SpeechToText:
         transcription_data.set_transcribed_text(transcribed_text)
 
     def capture_speech(self):
-        self.logger.info("CAPTURING SPEECH...")
+        self.logger.info("Capturing speech...")
         with speech_recognition.Microphone(self.mic_index) as mic:
             audio_data = self.recognizer.listen(mic)
 
@@ -95,13 +96,13 @@ class SpeechToText:
         if self.executor is None or self.executor._shutdown:
             self.executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="STT")
 
-        self.logger.info("STARTED LISTENING")
+        self.logger.info("Started listening")
         self.listening = True
         while self.listening == True:
             self.capture_speech()
     
     def stop_listening(self):
-        self.logger.info("STOPPED LISTENING")
+        self.logger.info("Stopped listening")
         self.listening = False
         self.executor.shutdown()
         self.executor = None
