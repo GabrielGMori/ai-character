@@ -5,5 +5,8 @@ An AI character which you can talk to in real time.
 - [x] Text to speech
 - [x] Generate responses
 - [x] Speech to text
+- [x] Optimize speech to text
+- [ ] Filter AI answers
+- [ ] Model and subtitles
 - [ ] Real time conversations (The AI decides the appropriate moment to answer)
-- [ ] Fine-tuning the model
+- [ ] Fine-tuning the model 

@@ -1,9 +1,9 @@
 import os.path
-from RealtimeTTS import TextToAudioStream, PiperEngine, PiperVoice
+from RealtimeTTS import TextToAudioStream, PiperEngine, PiperVoice#, EdgeEngine
 import logging
 
 class TextToSpeech:
-    def __init__(self, model_path, config_path, logger=logging.getLogger(__name__)):
+    def __init__(self, model_path, config_path, on_audio_finished, logger=logging.getLogger(__name__)):
         self.logger = logger
         self.logger.info("LOADING TEXT TO SPEECH VOICE...")
 
@@ -27,9 +27,12 @@ class TextToSpeech:
             piper_path="piper",
             voice=self.voice,
         )
+        # self.engine = EdgeEngine(pitch=60, rate=20)
+        # self.engine.set_voice("pt-BR-ThalitaMultilingualNeural")
 
         self.logger.info("CREATING TEXT TO SPEECH AUDIO STREAM...")
-        self.stream = TextToAudioStream(self.engine)
+        self.on_audio_finished = on_audio_finished
+        self.stream = TextToAudioStream(self.engine, on_audio_stream_stop=self.on_audio_finished)
         self.logger.info("TEXT TO SPEECH READY!")
 
     def is_playing(self):
@@ -42,7 +45,7 @@ class TextToSpeech:
 
     def interrupt_stream(self):
         self.stream.stop()
-        self.stream = TextToAudioStream(self.engine)
+        self.stream = TextToAudioStream(self.engine, on_audio_stream_stop=self.on_audio_finished)
         self.interrupted = True
 
     def uninterrupt_stream(self):

@@ -1,13 +1,20 @@
 if __name__ == '__main__':
     import threading
-    from Conversation.conversation import start_conversation, interrupt_speech, stop_conversation
+    from concurrent.futures import ThreadPoolExecutor
+    from Conversation.conversation import ConversationModule
 
-    threading.Thread(target=start_conversation).start()
+    conversation = ConversationModule()
+
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="Main")
+    executor.submit(conversation.start_conversation)
+
     while True:
         try:
             input()
-            interrupt_speech()
-            print("Interrupted")
+            conversation.interrupt_speech()
         except KeyboardInterrupt:
-            stop_conversation()
+            conversation.interrupt_speech()
+            conversation.stop_conversation()
+            executor.shutdown()
             break
+    print("Finished program")

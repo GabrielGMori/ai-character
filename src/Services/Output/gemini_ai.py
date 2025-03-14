@@ -1,8 +1,10 @@
+from copy import deepcopy
 import os
 from random import randint
 import time
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
 import logging
 
 load_dotenv()
@@ -24,10 +26,12 @@ class GeminiAI:
         self.error_responses = error_responses
         self.logger.info("GEMINI MODEL READY!")
 
-    def generate(self, prompt, max_retries=3, delay=1):
+    def generate(self, prompt, config=None, max_retries=3, delay=1):
+        if config == None:
+            config = self.config
         for i in range(max_retries):
             try:
-                response = self.chat.send_message(message=prompt, config=self.config)
+                response = self.chat.send_message(message=prompt, config=config)
                 break
             except Exception as exception:
                 self.logger.error(exception)
@@ -39,8 +43,10 @@ class GeminiAI:
         self.logger.info(f"GENERATED CONTENT: {response.text}")
         return response
     
-    def append_to_chat(self, content):
-        self.chat = self.client.chats.create(model="gemini-2.0-flash-exp", history = self.chat.get_history().append(content))
-        self.logger.info(f"APPENDED TO CHAT: {content}")
+    def append_to_chat(self, text):
+        config = deepcopy(self.config)
+        config.max_output_tokens = 1
+        self.generate(prompt=text, config=config)
+        self.logger.info(f"APPENDED TO CHAT: {text}")
 
 

@@ -1,6 +1,7 @@
 import threading
 import speech_recognition
 from queue import Queue
+from concurrent.futures import ThreadPoolExecutor
 import logging
 
 class TranscriptionData:
@@ -16,6 +17,8 @@ class TranscriptionData:
 class SpeechToText:
     def __init__(self, language, mic_index, author_name, on_audio_received, logger=logging.getLogger(__name__)):
         self.logger = logger
+        self.executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="STT")
+
         self.language = language
         self.mic_index = mic_index
         self.author_name = author_name
@@ -23,6 +26,7 @@ class SpeechToText:
 
         self.listening = False
         self.transcription_queue = Queue()
+        self.process_queue_lock = threading.Lock()
         self.processing_transcriptions = False
 
         self.logger.info("LOADING SPEECH TO TEXT MODEL...")
@@ -42,24 +46,24 @@ class SpeechToText:
         self.on_audio_received(text, self.author_name)
 
     def process_transcription_queue(self):
-        if self.processing_transcriptions == True: return
+        self.process_queue_lock.acquire(timeout=1)
         self.logger.info("PROCESSING QUEUE")
         full_text = ""
 
         while not self.transcription_queue.empty():
-            self.processing_transcriptions = True
-            next = self.transcription_queue.get()
+            transcription_data = self.transcription_queue.get()
 
-            if next.transcribed_text == None:
+            if transcription_data.transcribed_text == None:
                 self.logger.info("WAITING FOR TRANSCRIPTION")
-                next.transcription_complete.wait()
-            if not next.transcribed_text == " ":
-                full_text += f" {next.transcribed_text}"
+                transcription_data.transcription_complete.wait()
+            if transcription_data.transcribed_text != " ":
+                full_text += f" {transcription_data.transcribed_text}"
         
         stripped_text = full_text.strip()
-        self.processing_transcriptions = False
-        if stripped_text == "": return
+        if stripped_text == "": 
+            return
         self.process_text(stripped_text)
+        self.process_queue_lock.release()
 
     def transcribe_audio_data(self, audio_data):
         try:
@@ -83,10 +87,14 @@ class SpeechToText:
             transcription_data = TranscriptionData(audio_data)
             self.transcription_queue.put(transcription_data)
 
-            threading.Thread(target=self.process_transcription_queue, args=[]).start()
-            threading.Thread(target=self.transcribe, args=[transcription_data]).start()
+            if not self.executor is None and not self.executor._shutdown:
+                self.executor.submit(self.process_transcription_queue)
+                self.executor.submit(self.transcribe, transcription_data)
 
     def start_listening(self):
+        if self.executor is None or self.executor._shutdown:
+            self.executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="STT")
+
         self.logger.info("STARTED LISTENING")
         self.listening = True
         while self.listening == True:
@@ -95,3 +103,5 @@ class SpeechToText:
     def stop_listening(self):
         self.logger.info("STOPPED LISTENING")
         self.listening = False
+        self.executor.shutdown()
+        self.executor = None
