@@ -73,13 +73,19 @@ class ConversationModule:
                 self.executor.submit(self.tts.play_stream)
         else:
             self.outputting = False
+        return response.text.strip()
+    
+    def shutdown(self):
+        self.interrupt_tts()
+        self.executor.shutdown()
+        self.executor = None
             
     def on_tts_audio_finished(self):
         self.outputting = False
 
     def interrupt_tts(self):
         self.tts.interrupt_stream()
-        self.logger.info("SPEECH INTERRUPTED")
+        self.logger.info("Speech interrupted")
 
     def get_ai_history(self):
         return self.ai.chat.get_history()
