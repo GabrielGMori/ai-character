@@ -2,3 +2,4 @@
 !Conversation/
 !Conversation/*
 !.gitignore
+__pycache__

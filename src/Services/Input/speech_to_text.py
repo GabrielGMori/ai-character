@@ -1,7 +1,6 @@
 import threading
 import speech_recognition
 from queue import Queue
-from concurrent.futures import ThreadPoolExecutor
 import logging
 
 class TranscriptionData:
@@ -17,7 +16,6 @@ class TranscriptionData:
 class SpeechToText:
     def __init__(self, author, language, mic_index, on_audio_received, logger=logging.getLogger(__name__)):
         self.logger = logger
-        self.executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="STT")
 
         self.author = author
         self.language = language
@@ -46,7 +44,7 @@ class SpeechToText:
         self.on_audio_received(self.author, text)
 
     def process_transcription_queue(self):
-        self.process_queue_lock.acquire(timeout=1)
+        self.process_queue_lock.acquire()
         self.logger.info("Processing queue")
         full_text = ""
 
@@ -61,6 +59,7 @@ class SpeechToText:
         
         stripped_text = full_text.strip()
         if stripped_text == "": 
+            self.process_queue_lock.release()
             return
         self.process_text(stripped_text)
         self.process_queue_lock.release()
@@ -88,14 +87,10 @@ class SpeechToText:
             transcription_data = TranscriptionData(audio_data)
             self.transcription_queue.put(transcription_data)
 
-            if not self.executor is None and not self.executor._shutdown:
-                self.executor.submit(self.process_transcription_queue)
-                self.executor.submit(self.transcribe, transcription_data)
+            threading.Thread(target=self.process_transcription_queue, daemon=True).start()
+            threading.Thread(target=self.transcribe, args=[transcription_data], daemon=True).start()
 
     def start_listening(self):
-        if self.executor is None or self.executor._shutdown:
-            self.executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="STT")
-
         self.logger.info("Started listening")
         self.listening = True
         while self.listening == True:
@@ -104,5 +99,3 @@ class SpeechToText:
     def stop_listening(self):
         self.logger.info("Stopped listening")
         self.listening = False
-        self.executor.shutdown()
-        self.executor = None

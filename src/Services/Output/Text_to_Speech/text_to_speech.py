@@ -1,4 +1,6 @@
 import os.path
+from queue import Queue
+import threading
 from RealtimeTTS import TextToAudioStream, PiperEngine, PiperVoice#, EdgeEngine
 import logging
 
@@ -7,9 +9,9 @@ MODELS_DIR = os.path.join(DIRNAME, "Voices/Models")
 CONFIGS_DIR = os.path.join(DIRNAME, "Voices/Configs")
 
 class TextToSpeech:
-    def __init__(self, model, config, on_audio_finished, logger=logging.getLogger(__name__)):
+    def __init__(self, model, config, logger=logging.getLogger(__name__)):
         self.logger = logger
-        self.logger.info("Loading text to speech voice...")
+        self.logger.debug("Loading text to speech voice...")
 
         model_path = os.path.join(MODELS_DIR, f"{model}.onnx")
         config_path = os.path.join(CONFIGS_DIR, f"{config}.onnx.json")
@@ -26,7 +28,7 @@ class TextToSpeech:
             config_file=config_path,
         )
 
-        self.logger.info("Loading text to speech engine...")
+        self.logger.debug("Loading text to speech engine...")
         self.engine = PiperEngine(
             piper_path="piper",
             voice=self.voice,
@@ -34,40 +36,52 @@ class TextToSpeech:
         # self.engine = EdgeEngine(pitch=60, rate=20)
         # self.engine.set_voice("pt-BR-ThalitaMultilingualNeural")
 
-        self.logger.info("Creating text to speech audio stream...")
-        self.on_audio_finished = on_audio_finished
-        self.stream = TextToAudioStream(self.engine, on_audio_stream_stop=self.on_audio_finished)
+        self.logger.debug("Creating text to speech audio stream...")
+        self.stream = TextToAudioStream(self.engine, on_audio_stream_stop=self.on_audio_stream_stop, level=logging.DEBUG)
+        self.audio_queue = Queue()
+        self.currently_speaking = None
         self.interrupted = False
-        self.logger.info("Text to speech ready!")
+        self.logger.debug("Text to speech ready!")
 
-    def is_playing(self):
-        return self.stream.is_playing()
+    def audio_generator(self):
+        first_chunk = False
+        try:
+            while True:
+                if self.interrupted == True:
+                    self.logger.debug("Stream interrupted, terminating")
+                    break
+                chunk = self.audio_queue.get()
+                if chunk is None:
+                    self.logger.debug("Last chunk reached, terminating stream")
+                    break
+                if not first_chunk:
+                    first_chunk = True
+                yield chunk
+        except Exception as exeception:
+            logging.error(f"Error during audio streaming: {str(exeception)}")
 
-    def play_stream(self):
-        if not self.stream.is_playing() and not self.interrupted:
-            self.logger.info("Playing text to speech...")
-            self.stream.play()
+    def on_audio_chunk_synthesized(self, chunk):
+        self.audio_queue.put(chunk)
 
-    def interrupt_stream(self):
-        self.stream.stop()
-        self.stream = TextToAudioStream(self.engine, on_audio_stream_stop=self.on_audio_finished)
-        self.interrupted = True
+    def on_audio_stream_stop(self):
+        self.audio_queue.put(None)
+        self.currently_speaking = None
+        self.logger.debug("Stream stopped")
 
-    def uninterrupt_stream(self):
-        self.interrupted = False
-    
-    def say(self, text):
+    def play_queue(self, text):
+        self.currently_speaking = text
+        self.logger.debug(f"Synthesizing audio for: {text}")
         self.stream.feed(text)
-        self.play_stream()
+        self.stream.play_async(on_audio_chunk=self.on_audio_chunk_synthesized, muted=True)
 
-    def add_to_stream(self, string):
-        if self.interrupted == False:
-            self.logger.info("Adding to synthesize: " + string.replace("\n", "") + "")
-            self.stream.feed(string)
-
-if __name__ == "__main__":
-    def on_audio_finished():
-        print("finished speaking")
-
-    tts = TextToSpeech(model="Lula", config="Lula", on_audio_finished=on_audio_finished, logger=logging.getLogger(__name__))
-    tts.s
+    def synthesize(self, text):
+        self.interrupted = False
+        if not self.stream.is_playing():
+            threading.Thread(target=self.play_queue, args=[text], daemon=True).start()
+        return self.audio_generator()
+    
+    def interrupt_stream(self):
+        self.logger.debug("Interrupting stream...")
+        self.interrupted = True
+        self.stream.stop()
+        self.stream = TextToAudioStream(self.engine, on_audio_stream_stop=self.on_audio_stream_stop, level=logging.INFO)

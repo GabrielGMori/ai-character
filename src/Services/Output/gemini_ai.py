@@ -21,12 +21,12 @@ class GeminiAI:
             logger.critical("It was not possible to read the gemini API key, check if the .env file is formated correctly")
             raise Exception("It was not possible to read the gemini API key, check if the .env file is formated correctly")
         
-        self.logger.info("Loading gemini model...")
+        self.logger.debug("Loading gemini model...")
         self.client = genai.Client(api_key=API_KEY)
         self.chat = self.client.chats.create(model=model)
         self.config = config
         self.error_responses = error_responses
-        self.logger.info("Gemini model ready!")
+        self.logger.debug("Gemini model ready!")
 
     def generate(self, prompt, config=None, max_retries=3, delay=1):
         if config == None:
@@ -42,11 +42,11 @@ class GeminiAI:
                     response = GenericResponse(text=self.error_responses[randint(0, len(self.error_responses)-1)])
                     break
             time.sleep(delay)
-        self.logger.info(f"Generated content: {response.text}")
+        self.logger.debug(f"Generated content: {response.text}")
         return response
     
     def append_to_chat(self, text):
         config = deepcopy(self.config)
         config.max_output_tokens = 1
         self.generate(prompt=text, config=config)
-        self.logger.info(f"Appended to chat: {text}")
+        self.logger.debug(f"Appended to chat: {text}")

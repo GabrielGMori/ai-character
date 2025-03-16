@@ -1,5 +1,5 @@
 import logging
-from concurrent.futures import ThreadPoolExecutor
+import threading
 from Services.Output.Text_to_Speech.text_to_speech import TextToSpeech
 from Services.Output.gemini_ai import GeminiAI
 from google.genai import types
@@ -22,7 +22,6 @@ logging.basicConfig(
 class ConversationModule:
     def __init__(self, preset):
         self.logger = logging.getLogger(__name__)
-        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="Conversation")
 
         with open(os.path.join(PRESETS_DIR, f"{preset}.json"), 'r', encoding="utf-8") as file:
             self.preset = json.load(file)
@@ -48,44 +47,42 @@ class ConversationModule:
         )
 
         self.ai = GeminiAI(model=self.preset["model"], config=self.config, error_responses=self.preset["error_responses"], logger=logging.getLogger(f"{__name__} ({self.preset['name']})"))
-        self.tts = TextToSpeech(model=self.preset["voice"], config=self.preset["voice"], on_audio_finished=self.on_tts_audio_finished, logger=logging.getLogger(f"{__name__} ({self.preset['name']})"))
+        self.tts = TextToSpeech(model=self.preset["voice"], config=self.preset["voice"], logger=logging.getLogger(f"{__name__} ({self.preset['name']})"))
         
-        self.outputting = False
+        self.output_locked = False
         print("Conversation initialized")
 
     def send(self, author, text):
-        if text == "": return
+        if text == "": 
+            return
         text_to_send = f"[{author} said] {text}"
         print("Sending: " + text_to_send)
 
-        if self.outputting == True: 
+        if self.output_locked == True: 
             self.ai.append_to_chat(text=text_to_send)
-            return
+            return None
         
-        self.outputting = True
-        self.tts.uninterrupt_stream()
+        self.output_locked = True
         response = self.ai.generate(prompt=text_to_send)
-        print("Received: " + response.text)
-        words = response.text.split()
-        if len(words) > 0 and not response.text.strip() == "<no response>":
-            for i in range(0, len(words), 10):
-                self.tts.add_to_stream(" ".join(words[i:i+10]))
-                self.executor.submit(self.tts.play_stream)
+        responseText = response.text.strip()
+        print("Received: " + responseText)
+        words = responseText.split()
+        audio = None
+        if len(words) > 0 and not responseText == "<no response>":
+            audio = self.tts.synthesize(responseText)
         else:
-            self.outputting = False
-        return response.text.strip()
-    
-    def shutdown(self):
-        self.interrupt_tts()
-        self.executor.shutdown()
-        self.executor = None
-            
-    def on_tts_audio_finished(self):
-        self.outputting = False
+            self.output_locked = False
+        return {
+            'text': responseText,
+            'audio': audio
+        }
+           
+    def unlock_outputting(self):
+        self.output_locked = False
 
-    def interrupt_tts(self):
+    def interrupt_tts_stream(self):
         self.tts.interrupt_stream()
-        self.logger.info("Speech interrupted")
+        self.logger.info("Stream interrupted")
 
     def get_ai_history(self):
         return self.ai.chat.get_history()
